@@ -1,53 +1,10 @@
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: spark-client
-
-spec:
-  serviceName: "spark-client-service"
-  replicas: 1
-  selector:
-    matchLabels:
-      app: spark-client
-
-  #POD SPEC
-  template:
-    metadata:
-      labels:
-        app: spark-client
-    spec:
-      containers:
-        - name: spark-client
-          #          image: apache/spark:3.5.0
-          #image: rairacer/myspark:v1
-          image: rabii10/spark-image:v2
-          imagePullPolicy: IfNotPresent
-
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-
-          command: [ "/bin/bash","-c" ]
-          args:
-            - |
-              apt-get update && apt-get install -y nano iputils-ping dnsutils
-              sleep infinity
-
-          ports:
-            - containerPort: 8081
-          resources:
-            requests:
-              cpu: "500m"
-              memory: "512Mi"
-            limits:
-              cpu: "1"
-              memory: "1Gi"
-
----
 apiVersion: v1
 kind: Service
 metadata:
-  name: spark-client-service
+  name: spark-client
+  namespace: data-pipeline
+  labels:
+    app: spark-client
 spec:
   clusterIP: None
   selector:
@@ -55,4 +12,54 @@ spec:
   ports:
     - port: 8081
       targetPort: 8081
-      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spark-client
+  namespace: data-pipeline
+spec:
+  serviceName: spark-client
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-client
+  template:
+    metadata:
+      labels:
+        app: spark-client
+    spec:
+      containers:
+        - name: spark-client
+          image: rabii10/spark-image:v2
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              apt-get update && apt-get install -y nano iputils-ping dnsutils
+              echo "Spark client ready"
+              sleep infinity
+          ports:
+            - containerPort: 8081
+              name: driver
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: spark-jobs
+              mountPath: /opt/spark/work-dir
+  volumeClaimTemplates:
+    - metadata:
+        name: spark-jobs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

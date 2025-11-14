@@ -1,93 +1,223 @@
-# 3A_projet_systeme_distribue
+# Pipeline de Traitement de Données Distribué - Infrastructure Kubernetes
 
+## 📋 Description
 
+Infrastructure Kubernetes optimisée pour un pipeline de traitement de données distribué utilisant :
+- **Apache Kafka** (KRaft mode) pour le streaming de messages
+- **Apache Spark** pour le traitement distribué et ML
+- **Python Producer** pour l'ingestion de données UNSW-NB15
+- **Prometheus & Grafana** pour le monitoring
 
-## Getting started
+## 🚀 Démarrage Rapide
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### Méthode 1: Script Automatisé
+```bash
+# Démarrer le pipeline complet
+./deploy.sh start
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+# Voir le statut
+./deploy.sh status
 
-## Add your files
+# Arrêter le pipeline
+./deploy.sh stop
+```
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### Méthode 2: Makefile
+```bash
+# Démarrer tout
+make all
+
+# Soumettre le job Spark
+make submit-spark-job
+
+# Voir les logs
+make logs-producer
+make logs-spark
+```
+
+## 📁 Structure du Projet
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.ensimag.fr/ngutruon/3a_projet_systeme_distribue.git
-git branch -M main
-git push -uf origin main
+.
+├── k8s-configs/
+│   ├── 00-namespace.yaml           # Namespace et quotas
+│   ├── 01-kafka-controller.yaml    # Kafka KRaft Controller
+│   ├── 02-kafka-broker.yaml        # Kafka Brokers (2 replicas)
+│   ├── 03-spark-master.yaml        # Spark Master
+│   ├── 04-spark-worker.yaml        # Spark Workers avec HPA
+│   ├── 05-spark-client.yaml        # Spark Client pour jobs
+│   ├── 06-producer-deployment.yaml # Python Producer (Deployment)
+│   ├── 07-prometheus.yaml          # Prometheus monitoring
+│   ├── 08-grafana.yaml            # Grafana dashboards
+│   └── 09-kafka-exporter.yaml     # Kafka metrics exporter
+├── spark/
+│   ├── spark_job.py                # Job Spark Streaming
+│   ├── model_utils.py              # Utilitaires ML
+│   └── pretrained_models/          # Modèles pré-entraînés
+├── Makefile                        # Commandes de gestion
+├── deploy.sh                       # Script de déploiement
+└── README.md                       # Cette documentation
 ```
 
-## Integrate with your tools
+## 🔧 Configuration
 
-- [ ] [Set up project integrations](https://gitlab.ensimag.fr/ngutruon/3a_projet_systeme_distribue/-/settings/integrations)
+### Resources Kubernetes
 
-## Collaborate with your team
+| Composant | CPU Request | Memory Request | CPU Limit | Memory Limit |
+|-----------|-------------|----------------|-----------|--------------|
+| Kafka Controller | 250m | 512Mi | 500m | 1Gi |
+| Kafka Broker | 300m | 512Mi | 500m | 1Gi |
+| Spark Master | 500m | 1Gi | 1000m | 2Gi |
+| Spark Worker | 500m | 1Gi | 1000m | 2Gi |
+| Python Producer | 250m | 512Mi | 500m | 1Gi |
+| Prometheus | 250m | 512Mi | 500m | 1Gi |
+| Grafana | 250m | 256Mi | 500m | 512Mi |
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Minikube Requirements
+- **Memory**: 6GB minimum
+- **CPUs**: 4 cores
+- **Disk**: 20GB
 
-## Test and Deploy
+## 📊 Monitoring
 
-Use the built-in continuous integration in GitLab.
+### Accès aux interfaces
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+Après le déploiement, accédez aux interfaces :
 
-***
+```bash
+# Obtenir l'IP de Minikube
+minikube ip
 
-# Editing this README
+# URLs d'accès
+Prometheus: http://<minikube-ip>:30090
+Grafana: http://<minikube-ip>:30030
+  User: admin
+  Password: admin123
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+# Port-forwarding alternatif
+make port-forward
+# Puis accéder à :
+# - Prometheus: http://localhost:9090
+# - Grafana: http://localhost:3000
+```
 
-## Suggestions for a good README
+### Métriques Disponibles
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+- **Kafka**: Messages/sec, Consumer lag, Partition distribution
+- **Spark**: Active jobs, Executor memory, Task duration
+- **System**: CPU/Memory usage, Pod health
 
-## Name
-Choose a self-explaining name for your project.
+## 🛠️ Opérations
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Gestion du Pipeline
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```bash
+# Voir les topics Kafka
+make list-topics
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+# Créer un topic manuel
+make create-topic
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+# Test consumer
+make test-consumer
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+# Redémarrer le producer
+make restart-pipeline
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+# Voir les logs
+kubectl logs -f -l app=python-producer -n data-pipeline
+kubectl logs -f -l app=spark-client -n data-pipeline
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Scaling
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+# Scale Spark Workers
+kubectl scale deployment spark-worker --replicas=3 -n data-pipeline
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+# Scale Producer
+kubectl scale deployment python-producer --replicas=2 -n data-pipeline
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Debugging
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+# Accès shell aux pods
+kubectl exec -it kafka-broker-0 -n data-pipeline -- bash
+kubectl exec -it spark-client-0 -n data-pipeline -- bash
 
-## License
-For open source projects, say how it is licensed.
+# Vérifier l'état des pods
+kubectl describe pod <pod-name> -n data-pipeline
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+# Voir les événements
+kubectl get events -n data-pipeline --sort-by='.lastTimestamp'
+```
+
+## 🔍 Améliorations Apportées
+
+1. **Organisation**: Namespace dédié avec quotas de ressources
+2. **Producer en Deployment**: Meilleure gestion et scaling
+3. **Health Checks**: Liveness et Readiness probes sur tous les services
+4. **Auto-scaling**: HPA pour les Spark Workers
+5. **Monitoring Complet**: Prometheus + Grafana avec dashboards
+6. **ConfigMaps**: Scripts externalisés pour faciliter les mises à jour
+7. **Resource Management**: Limites et requêtes optimisées
+8. **Persistance**: PVC pour Kafka et Spark
+9. **Automatisation**: Makefile et script de déploiement
+
+## 📝 Notes Importantes
+
+- Les données UNSW-NB15 sont téléchargées automatiquement par le producer
+- Le modèle ML détecte les anomalies réseau en temps réel
+- Les métriques sont collectées toutes les 15 secondes
+- Les logs Kafka sont conservés 24h par défaut
+
+## 🚨 Troubleshooting
+
+### Pods en CrashLoopBackOff
+```bash
+# Vérifier les logs
+kubectl logs <pod-name> -n data-pipeline --previous
+
+# Augmenter les ressources si nécessaire
+minikube stop
+minikube start --memory=8192 --cpus=6
+```
+
+### Kafka Connection Issues
+```bash
+# Vérifier la connectivité
+kubectl exec -it kafka-broker-0 -n data-pipeline -- \
+  kcat -b localhost:19092 -L
+```
+
+### Spark Job Failures
+```bash
+# Vérifier les logs du driver
+kubectl logs spark-client-0 -n data-pipeline
+
+# UI Spark Master
+kubectl port-forward svc/spark-master 8080:8080 -n data-pipeline
+```
+
+## 📚 Ressources
+
+- [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+- [Apache Spark Documentation](https://spark.apache.org/docs/latest/)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Grafana Documentation](https://grafana.com/docs/)
+
+## ✅ Checklist de Déploiement
+
+- [ ] Minikube démarré avec ressources suffisantes
+- [ ] Namespace créé
+- [ ] Kafka déployé et fonctionnel
+- [ ] Spark cluster opérationnel
+- [ ] Producer démarré
+- [ ] Monitoring accessible
+- [ ] Job Spark soumis
+- [ ] Métriques visibles dans Grafana
+
+## 📧 Support
+
+Pour toute question sur l'infrastructure Kubernetes, contactez l'équipe DevOps.

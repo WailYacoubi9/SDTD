@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: producer-script
+  namespace: data-pipeline
+data:
+  producer.py: |
+    import json
+    import time
+    import random
+    from confluent_kafka import Producer
+    import pandas as pd
+    import numpy as np
+    import subprocess
+    import os
+    
+    # Configuration Kafka
+    p = Producer({
+        "bootstrap.servers": "kafka-broker-0.kafka-broker:19092,kafka-broker-1.kafka-broker:19092",
+        "enable.idempotence": True,
+        "acks": "all",
+        "retries": 3,
+        "max.in.flight.requests.per.connection": 5
+    })
+    
+    csv_files = ['UNSW-NB15_1.csv', 'UNSW-NB15_2.csv', 'UNSW-NB15_3.csv', 'UNSW-NB15_4.csv']
+    
+    def on_delivery(err, msg):
+        if err:
+            print(f"❌ Delivery failed: {err}")
+        else:
+            print(f"✅ Delivered to {msg.topic()} [{msg.partition()}] @ offset {msg.offset()}")
+    
+    # Download datasets if not present
+    if not os.path.exists('./events_logs_dataset'):
+        print("Downloading datasets...")
+        url = "https://mega.nz/folder/EYcF3I7A#shlgKrU69INQxKbrZdDBxQ"
+        destination = "./"
+        subprocess.run(["mega-get", url, destination])
+    
+    try:
+        file_idx = 0
+        features_pd = pd.read_csv('./events_logs_dataset/NUSW-NB15_features.csv', 
+                                 encoding='utf-8', encoding_errors='ignore')
+        feature_names = features_pd['Name'].tolist()
+        
+        ml_dataset = ['id', 'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes',
+                     'dbytes', 'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss',
+                     'sinpkt', 'dinpkt', 'sjit', 'djit', 'swin', 'stcpb', 'dtcpb', 'dwin',
+                     'tcprtt', 'synack', 'ackdat', 'smean', 'dmean', 'trans_depth',
+                     'response_body_len', 'ct_srv_src', 'ct_state_ttl', 'ct_dst_ltm',
+                     'ct_src_dport_ltm', 'ct_dst_sport_ltm', 'ct_dst_src_ltm',
+                     'is_ftp_login', 'ct_ftp_cmd', 'ct_flw_http_mthd', 'ct_src_ltm',
+                     'ct_srv_dst', 'is_sm_ips_ports', 'attack_cat', 'label']
+        
+        while True:
+            csv_file = csv_files[file_idx]
+            print(f"Processing file: {csv_file}")
+            
+            csv_file_df = pd.read_csv(f"./events_logs_dataset/{csv_file}", header=None)
+            
+            feature_names = [name.lower() for name in feature_names]
+            feature_names = [name.replace('sintpkt', 'sinpkt')
+                           .replace('dintpkt', 'dinpkt')
+                           .replace('smeansz', 'smean')
+                           .replace('dmeansz', 'dmean')
+                           .replace('res_bdy_len', 'response_body_len') 
+                           for name in feature_names]
+            
+            csv_file_df.columns = feature_names
+            csv_file_df['rate'] = np.nan
+            csv_file_df = csv_file_df.reindex(columns=ml_dataset, fill_value=0)
+            csv_file_df = csv_file_df.drop(columns=["attack_cat", "label", "id"])
+            
+            for index, row in csv_file_df.iterrows():
+                log = row.to_dict()
+                
+                p.produce(
+                    topic="demo",
+                    value=json.dumps(log).encode(),
+                    callback=on_delivery
+                )
+                p.poll(0)
+                
+                # Rate limiting
+                if index % 10 == 0:
+                    time.sleep(1)
+                    p.flush()
+            
+            file_idx = (file_idx + 1) % len(csv_files)
+            
+    except KeyboardInterrupt:
+        print("Stopping producer...")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        p.flush()
+        print("Producer stopped")
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-producer
+  namespace: data-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-producer
+  template:
+    metadata:
+      labels:
+        app: python-producer
+    spec:
+      containers:
+        - name: producer
+          image: python:3.11
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Installation des dépendances
+              apt-get update && apt-get install -y wget
+              wget https://mega.nz/linux/repo/Debian_13/amd64/megacmd-Debian_13_amd64.deb
+              apt install -y "$PWD/megacmd-Debian_13_amd64.deb"
+              pip install confluent-kafka pandas numpy
+              
+              # Copie du script depuis ConfigMap
+              cp /scripts/producer.py /app/producer.py
+              
+              # Attendre que Kafka soit prêt
+              echo "Waiting for Kafka to be ready..."
+              sleep 30
+              
+              # Lancer le producer
+              cd /app
+              python producer.py
+          volumeMounts:
+            - name: producer-script
+              mountPath: /scripts
+            - name: data-volume
+              mountPath: /app
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: producer-script
+          configMap:
+            name: producer-script
+        - name: data-volume
+          emptyDir: {}
