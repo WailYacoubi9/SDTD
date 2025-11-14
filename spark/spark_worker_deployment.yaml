@@ -46,7 +46,7 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              /opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
+              /opt/spark/sbin/start-worker.sh spark://spark-master:7077 --webui-port 8081 &&
               tail -f /opt/spark/logs/spark--org.apache.spark.deploy.worker*.out
 
           ports:
