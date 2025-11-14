@@ -49,7 +49,7 @@ data:
       
       - job_name: 'spark-workers'
         static_configs:
-          - targets: ['spark-worker:8081']
+          - targets: ['spark-worker-svc:8081']
         metrics_path: '/metrics/prometheus'
 ---
 apiVersion: apps/v1
